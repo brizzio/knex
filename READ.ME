@@ -1,0 +1,301 @@
+To get started, we have to initialize our project to create our package.json file.
+
+npm init -y
+
+Setup Knex
+===========
+
+Install dependencies needed for the project
+
+npm i knex -g
+npm i pg express dotenv --save
+
+Create a .env file in the root of your project and add the database URL. Example below.
+DB_URL=URL (where URL is the database connection string)
+
+On your the terminal, run the command below to initialize knex
+knex init
+The above command would generate a knexfile.js in the root of your project and would look like below.
+// Update with your config settings.
+
+module.exports = {
+
+  development: {
+    client: 'sqlite3',
+    connection: {
+      filename: './dev.sqlite3'
+    }
+  },
+
+  staging: {
+    client: 'postgresql',
+    connection: {
+      database: 'my_db',
+      user:     'username',
+      password: 'password'
+    },
+    pool: {
+      min: 2,
+      max: 10
+    },
+    migrations: {
+      tableName: 'knex_migrations'
+    }
+  },
+
+  production: {
+    client: 'postgresql',
+    connection: {
+      database: 'my_db',
+      user:     'username',
+      password: 'password'
+    },
+    pool: {
+      min: 2,
+      max: 10
+    },
+    migrations: {
+      tableName: 'knex_migrations'
+    }
+  }
+
+};
+
+I am going to change the knexfile.js configuration file to use Postgres and also specify the directory where my migrations and seeds should be saved. Edit the knexfile.js file to the code below.
+require('dotenv').config();
+
+module.exports = {
+  development: {
+    client: 'pg',
+    connection: process.env.DB_URL,
+    migrations: {
+      directory: './data/migrations',
+    },
+    seeds: { directory: './data/seeds' },
+  },
+
+  testing: {
+    client: 'pg',
+    connection: process.env.DB_URL,
+    migrations: {
+      directory: './data/migrations',
+    },
+    seeds: { directory: './data/seeds' },
+  },
+
+  production: {
+    client: 'pg',
+    connection: process.env.DB_URL,
+    migrations: {
+      directory: './data/migrations',
+    },
+    seeds: { directory: './data/seeds' },
+  },
+};
+
+
+env
+{
+    "local": {
+        "NODE_ENV": "local",
+        "user": "postgres",
+        "host": "localhost",
+        "database": "postgres",
+        "password": "80sao20ver",
+        "port": "5432",
+        "key":"pr0f1tm415"
+    },
+    "development": {
+        "NODE_ENV": "development",
+        "user": "postgres",
+        "host": "3.219.57.146",
+        "database": "postgres",
+        "password": "pr0f1t#2020",
+        "port": "5432",
+        "key":"pr0f1tm415"
+    },
+    "production": {
+        "NODE_ENV": "production",
+        "user": "postgres",
+        "host": "profitdb-serverless-pricepoint.cluster-cv1fdgzkliu6.us-east-1.rds.amazonaws.com",
+        "database": "postgres",
+        "password": "O4G06Zlw64hH6O6bRwMg",
+        "port": "5432",
+        "key":"pr0f1tm415"
+    }
+}
+
+===========================================================================================================
+
+Simplifies the execution of database migrations across different schemas with Knex
+While knex.js supports the execution of queries across different schemas with the use of the withSchema() method, there's no simple way to run migration across different schemas programmatically, sending the schema name as a parameter to the knex.migrate() command.
+
+This library was created to address this issue.
+
+How to use
+This library offers two functions, one to create new schemas, and one to execute migrations on a schema
+
+npm i knex-migration-with-schema
+Creating new schemas
+Import the createSchema method:
+
+import { createSchema } from './creator'
+Create a schema by providing a knex connection and a schemaName. If the schema already exists, it will be skipped (no exceptions will be thrown)
+
+await createSchema({ knex, schemaName: 'users' })
+Executing migrations on a schema
+Import the executeSchemaMigration method:
+
+import { executeSchemaMigration } from 'knex-migration-with-schema'
+Execute the migrations passing as parameters an open knex database connection (knex), the name of the schema in which you want to (schemaName) and the migrations you want to execute, as a dictionary (migrations)
+
+const schemaName = 'users'
+ 
+const userMigrations = {
+  createUsersTable: (schemaName) => ({
+    async up(knex) {
+      return knex.schema.withSchema(schemaName).createTable('users', (table) => {
+        table.increments('id').primary()
+        table.text('email').notNullable().unique
+      })
+    },
+    async down(knex) {
+      return knex.schema.withSchema(schemaName).dropTableIfExists('users')
+    },
+  }),
+}
+ 
+await executeSchemaMigration({ knex, schemaName, migrations: userMigrations })
+Note that the migrations dictionary has the name of the migration as key (the one that will be stored in the knex_migrations table), and the up and down functions as values.
+
+To add new migrations you can simply expand this object; as expected, only the non-executed migrations will be performed:
+
+const userMigrations = {
+  createUsersTable: (schemaName) => ({
+    async up(knex) {
+      return knex.schema.withSchema(schemaName).createTable('users', (table) => {
+        table.increments('id').primary()
+        table.text('email').notNullable().unique
+      })
+    },
+    async down(knex) {
+      return knex.schema.withSchema(schemaName).dropTableIfExists('users')
+    },
+  }),
+  addUserNameColumn: (schemaName) => ({
+    async up(knex) {
+      return knex.schema.withSchema(schemaName).table('users', (table) => {
+        table.text('user_name')
+      })
+    },
+    async down(knex) {
+      return knex.schema.withSchema(schemaName).table('users', (table) => {
+        table.dropColumn('user_name')
+      })
+    },
+  }),
+)
+Executing migrations on a schema based on a directory
+await executeSchemaMigrationFromDir({
+  knex,
+  schemaName,
+  directory: `migration_files`,
+})
+Using the executeSchemaMigrationFromDir function, you have access to the schema name in your migration files.
+
+// migration_files/0001_create_customers_table.ts
+ 
+import Knex, { Migration } from 'knex'
+ 
+export default (schemaName: string): Migration => ({
+  async up(knex: Knex) {
+    return knex.schema.withSchema(schemaName).createTable('customers', (table) => {
+      table.increments('id').primary()
+      table.text('name').notNullable()
+    })
+  },
+  async down(knex: Knex) {
+    return knex.schema.withSchema(schemaName).dropTableIfExists('customers')
+  },
+})
+
+
+=============================================================================================
+
+ exports.up = (knex) => {
+  knex.schema.createTable('bookings', (table) => {
+    table.increment('booking_id').primary()
+    table.foreign('user_id').references('user_id').inTable('users').notNullable().onDelete('CASCADE').index()
+    table.foreign('room_id').references('room_id').inTable('rooms').notNullable().onDelete('CASCADE').index()
+    table.integer('total_person').notNullable().defaultTo(0)
+    table.datetime('booking_time').notNullable().defaultTo(knex.fn.now())
+    table.string('noted').notNullable()
+    table.datetime('check_in_time').defaultTo(knex.fn.now())
+    table.datetime('check_out_time').defaultTo(knex.fn.now())
+    table.timestamp('created_at').defaultTo(knex.fn.now())
+    table.timestamp('update_at').defaultTo(knex.fn.now())
+    table.timestamp('delete_at').defaultTo(knex.fn.now())
+  })
+}
+
+exports.down = (knex) => knex.schema.dropTable('bookings')
+
+
+
+===================================================================================================
+
+Insert In Knex
+
+Similar to SQL, Knex also has a insert method which you can use to add records to the table. At first we will create objects having the values which we need to insert into the database as shown below.
+
+var insert1 = {col1: "a4", col2: "b4", col3: "c4"}
+var insert2 = {col1: "a5", col2: "b5", col3: "c5"}
+
+Now we will add these values to the database as shown below. In the below code at first we are creating objects and then using insert method we are inserting the data in table test and after that logging the newly inserted id.
+
+var knex = require("knex")(knexConfig);
+var insert1 = {col1: "a4", col2: "b4", col3: "c4"};
+
+knex.insert(insert1).into("test").then(function (id) {
+  console.log(id);
+})
+.finally(function() {
+  knex.destroy();
+});
+
+
+Update in Knex
+
+Similar to delete method we will first query and select the record using where method and then call the update method with parameters you want to update.
+
+var knex = require("knex")(knexConfig);
+knex("test").where("col1","a3")
+  .update({col2: "b3new"}).then(function (count) {
+ console.log(count);
+}).finally(function () {
+ knex.destroy();
+});
+
+Delete In Knex
+
+Similar to SQL, Knex also has a delete (or del) method which you can use to delete records to the table. In the below code we want to delete record based on a condition that the col1 value should be "a4", so for that at first we will write a where method and then call the del method as shown below.
+
+var knex = require("knex")(knexConfig);
+knex("test").where("col1","a4").del().then(function (count) {
+  console.log(count);
+}).finally(function () {
+  knex.destroy();
+});
+
+=========================================================================
+
+app.get("/users/:username", (request, response) => {
+    knex
+      .where("username", request.params.username)
+      .select()
+      .first()
+      .table("users")
+      .then(user => user ? response.json({data: user})
+                         : response.sendStatus(404))
+      .catch(err => response.sendStatus(500))
+  });
